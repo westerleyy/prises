@@ -1,2 +1,4 @@
-# prises
-A measure of rising prices
+# PRises  
+  
+## Rising Prices...    
+lift all things, or do they? 
