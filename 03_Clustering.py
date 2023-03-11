@@ -116,13 +116,57 @@ plt.show()
 ## Assigning clusters of sizes 16, 20, 25
 ## Entirely arbitrary
 
-product_name_kmeans_k16= KMeans(n_clusters = 16, random_state = 20).fit(x)
-product_name_kmeans_k20= KMeans(n_clusters = 20, random_state = 20).fit(x)
 product_name_kmeans_k25= KMeans(n_clusters = 25, random_state = 20).fit(x)
+product_name_kmeans_k35= KMeans(n_clusters = 35, random_state = 20).fit(x)
+product_name_kmeans_k40= KMeans(n_clusters = 40, random_state = 20).fit(x)
 
-unique_cl_product_names_df.loc[:, 'k16']  = product_name_kmeans_k16.labels_
-unique_cl_product_names_df.loc[:, 'k20']  = product_name_kmeans_k20.labels_
 unique_cl_product_names_df.loc[:, 'k25']  = product_name_kmeans_k25.labels_
+unique_cl_product_names_df.loc[:, 'k35']  = product_name_kmeans_k35.labels_
+unique_cl_product_names_df.loc[:, 'k40']  = product_name_kmeans_k40.labels_
+
+unique_cl_product_names_df = unique_cl_product_names_df.merge(top_orders_df[['cl_productname', 'organizationId']]) 
+
+# %%
+## Find the max and mean price of each item in the top orders df, the frequency it appears, and the min and max date
+## Remove those that cost 0
+sg_orders_clean_nonzero = sg_orders_clean.loc[sg_orders_clean['pre_tax_amount']> 0].copy()
+sg_orders_price = sg_orders_clean_nonzero[['organizationId', 'pre_tax_amount', 'cl_productname']].groupby(['organizationId', 'cl_productname']).agg(
+    min_price = ('pre_tax_amount', 'min'),
+    max_price = ('pre_tax_amount', 'max'),
+    frequency = ('pre_tax_amount', 'count')
+    ).reset_index()
+sg_orders_price.drop_duplicates(inplace = True)
+
+grouped_products = unique_cl_product_names_df.merge(sg_orders_price)
+grouped_products = grouped_products[['cl_productname', 'organizationId', 'min_price', 'max_price', 'frequency', 'k25', 'k35', 'k40']]
+grouped_products.rename(columns = {'cl_productname': 'product_ordered',
+                                   'k25': '25_groups',
+                                   'k35': '35_groups',
+                                   'k40': '40_groups'}, inplace = True)
+
+grouped_products.to_csv('./exports/grouping_with_min_max.csv', index = False)
+
+# %%
+## FUCKING DUPLICATES ALL OVER THE PLACE ADJUST WHEN ALF REQUIRES
+sg_orders_minprice_date = sg_orders_price[['min_price', 'organizationId', 'cl_productname']].merge(sg_orders_clean_nonzero[['pre_tax_amount', 'cl_productname', 'invoiceDate', 'organizationId']], left_on = ['min_price', 'cl_productname', 'organizationId'], right_on = ['pre_tax_amount', 'cl_productname', 'organizationId'])
+sg_orders_minprice_date.sort_values(by = ['cl_productname', 'organizationId', 'invoiceDate'], inplace = True)
+sg_orders_minprice_dupes = sg_orders_minprice_date.duplicated()
+sg_orders_minprice_date = sg_orders_minprice_date[sg_orders_minprice_dupes]
+sg_orders_maxprice_date.drop_duplicates(inplace = True)
+sg_orders_minprice_date = sg_orders_minprice_date[['min_price', 'organizationId', 'cl_productname', 'invoiceDate']].copy()
+sg_orders_minprice_date.rename(columns = {'invoiceDate': 'min_price_invoiceDate'}, inplace = True)
+
+sg_orders_maxprice_date = sg_orders_price[['max_price', 'organizationId', 'cl_productname']].merge(sg_orders_clean_nonzero[['pre_tax_amount', 'cl_productname', 'invoiceDate', 'organizationId']], left_on = ['max_price', 'cl_productname', 'organizationId'], right_on = ['pre_tax_amount', 'cl_productname', 'organizationId'])
+sg_orders_maxprice_date.sort_values(by = ['cl_productname', 'organizationId', 'invoiceDate'], inplace = True)
+sg_orders_maxprice_dupes = sg_orders_maxprice_date.duplicated()
+sg_orders_maxprice_date = sg_orders_maxprice_date[sg_orders_maxprice_dupes]
+sg_orders_maxprice_date.drop_duplicates(inplace = True)
+sg_orders_maxprice_date = sg_orders_maxprice_date[['max_price', 'organizationId', 'cl_productname', 'invoiceDate']].copy()
+sg_orders_maxprice_date.rename(columns = {'invoiceDate': 'max_price_invoiceDate'}, inplace = True)
+
+
+sg_orders_price_complete = sg_orders_price.merge(sg_orders_minprice_date)
+sg_orders_price_complete = sg_orders_price_complete.merge(sg_orders_maxprice_date, on = ['organizationId', 'cl_productname', 'max_price'])
 
 # %%
 ## Suppose we take k = 25 and then test for price changes within the group. Look for in-group correlation/similarity
@@ -134,6 +178,8 @@ grouped_cl_product_names_df.rename(columns = {'k25': 'grouping'}, inplace = True
 ### Find the min and max price for each item from the Orders DF
 ### Remove those that were zero-priced
 top_orders_min_max = grouped_cl_product_names_df.merge(sg_orders_clean[['pre_tax_amount', 'organizationId', 'cl_productname']])
+no_change = top_orders_min_max.loc[top_orders_min_max['pre_tax_amount'] == 0].copy()
+no_change_items = no_change.cl_productname.unique().tolist()
 top_orders_min_max = top_orders_min_max.loc[top_orders_min_max['pre_tax_amount'] > 0].copy()
 top_orders_min_max = top_orders_min_max.groupby(['organizationId', 'cl_productname']).agg(
     min_pre_tax_amount = ('pre_tax_amount', 'min'),
@@ -171,7 +217,6 @@ sns.boxplot(data = top_orders_min_max_abs_trimmed, x = 'grouping', y = 'diff')
 ## Testing for statistical significance of differences in distribution
 ### Can we run a Kolmogorov Test to determine that the samples for each group are different?
 
-
 ### count the number of items in each group
 group_count = top_orders_min_max.groupby('grouping').count()
 
@@ -179,12 +224,13 @@ group_count = top_orders_min_max.groupby('grouping').count()
 k14 = top_orders_min_max.loc[top_orders_min_max['grouping'] == 14, ['pct_diff']].to_numpy()
 k17 = top_orders_min_max.loc[top_orders_min_max['grouping'] == 17, ['pct_diff']].to_numpy()
 k22 = top_orders_min_max.loc[top_orders_min_max['grouping'] == 22, ['pct_diff']].to_numpy()
-
+all_orders_pct_diff = top_orders_min_max[['pct_diff']].to_numpy()
 
 ### If the KS statistic is large, then the p-value may be small, which may be taken as evid against the null hypothesis
 ### where the null hypothesis is that the two are the same
+### I can prove that some are different from others. But so what? The in-group differences might be pretty big
 
-ks2_obj = scipy.stats.ks_2samp(data1 = np.ravel(k14), data2 = np.ravel(k17))
+ks2_obj = scipy.stats.ks_2samp(data1 = np.ravel(k14), data2 = np.ravel(all_orders_pct_diff))
 print(ks2_obj.statistic)
 print(ks2_obj.pvalue)
 
