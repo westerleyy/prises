@@ -9,6 +9,11 @@ Created on Sat Jan  7 06:34:46 2023
 @author: wesch
 """
 # %%
+import os
+# Change directory
+base_path = "C:/Users/wesch/Documents/FoodRazor/"
+os.chdir(base_path)
+
 
 import pandas as pd
 import config_fr
@@ -41,6 +46,13 @@ invoice_entity = pd.read_sql_query("""
                                    WHERE "invoiceDate" > '2022-01-01'
                                    LIMIT 10
                                    """, cnx)
+                                   
+product_entity = pd.read_sql_query("""
+                                   SELECT *
+                                   FROM invoice_product_entity
+                                   
+                                   LIMIT 10
+                                   """, cnx)                        
 
 ## Get SG orders
 all_sg_orders = pd.read_sql_query("""
@@ -59,19 +71,19 @@ ON b.id = l."organizationId"
 ), 
 
 tomato_sales AS(
-SELECT name AS productName, CAST(amount AS FLOAT)/10000 AS amount, "createdAt", "invoiceId", b."businessName", "organizationProductId", "organizationId"
+SELECT name AS productName, CAST(amount AS FLOAT)/10000 AS pre_tax_amount, quantity, "invoiceId", b."businessName", "organizationProductId", "organizationId"
 FROM invoice_product_entity
 INNER JOIN biz_name AS b 
 ON b.locationID = "locationId"
 WHERE "isDeleted" = 'FALSE'
 )
 
-SELECT t.productName, t.amount, t."createdAt", t."invoiceId", i."supplierName", t."businessName", t."organizationId", t."organizationProductId", i."invoiceDate"  
+SELECT t.productName, t.pre_tax_amount, t.quantity, t."invoiceId", i."supplierName", t."businessName", t."organizationId", i."invoiceDate"  
 FROM invoice_entity AS i
 INNER JOIN tomato_sales AS t 
 ON i.id = t."invoiceId"
 WHERE i."invoiceDate" > '2021-01-01'
-ORDER BY t."organizationId", t.productName, t."createdAt";
+ORDER BY t."organizationId", t.productName, i."invoiceDate";
 """, cnx)
 
 
