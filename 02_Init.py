@@ -2,46 +2,24 @@
 """
 Created on Sat Jan  7 06:34:46 2023
 
-1) Test connection to the DB
-2) Determine which table to use
-3) Extract and pull data offline
+1) Explore orders from SG between 2020 and now
 
 @author: wesch
 """
 # %%
 
 import pandas as pd
-import config_fr
-from sqlalchemy import create_engine
-from sqlalchemy import engine
+import os
 
-# create connection
-url_object = engine.URL.create(
-    "postgresql",
-    username = config_fr.USER,
-    password = config_fr.PASSWORD,
-    host = config_fr.PGHOST,
-    port = 5432,
-    database= config_fr.PGDATABASE
-    )
+# Change directory
+cwd = os.getcwd()
+os.chdir(cwd + "\prises")
 
-cnx = create_engine(url_object)
+# Import data
+sg_orders = pd.read_csv('all_sg_orders.csv')
 
 # %%
-## Get a list of orders
-tables = pd.read_sql_query("""
-                           SELECT * FROM information_schema.tables
-                           """, cnx)
-
-
-## See what is inside the invoice_entity table
-invoice_entity = pd.read_sql_query("""
-                                   SELECT *
-                                   FROM invoice_entity
-                                   WHERE "invoiceDate" > '2022-01-01'
-                                   LIMIT 10
-                                   """, cnx)
-
+# REFERENCE POINT
 ## Get SG orders
 all_sg_orders = pd.read_sql_query("""
 WITH sg_biz AS(
@@ -76,4 +54,4 @@ ORDER BY t."organizationId", t.productName, t."createdAt";
 
 
 # %%
-all_sg_orders.to_csv('./prises/all_sg_orders.csv', index=False)
+
